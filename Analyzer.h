@@ -36,13 +36,10 @@ private:
     string currentFunctionName;
     unordered_set<string> allFunctionNames;
     
-    
     void analyzeStatement(Statement* stmt, FunctionMetrics& metrics) {
         if (!stmt) return;
         
-        
         metrics.loc++;
-        
         
         switch (stmt->type) {
             case StatementType::BLOCK_STATEMENT: {
@@ -61,9 +58,7 @@ private:
                 analyzeExpression(ifStmt->condition, metrics);
                 metrics.comparisonCount++; 
                 
-                
                 analyzeStatement(ifStmt->thenBranch, metrics);
-                
                 
                 if (ifStmt->elseBranch) {
                     analyzeStatement(ifStmt->elseBranch, metrics);
@@ -75,18 +70,14 @@ private:
                 WhileStatement* whileStmt = (WhileStatement*)stmt;
                 metrics.loopCount++;
                 
-                
                 analyzeExpression(whileStmt->condition, metrics);
-                
                 
                 if (metrics.estimatediterationCount == 0) {
                     metrics.estimatediterationCount = 10;
                 } else {
-                    
                     metrics.estimatediterationCount *= 10;
                 }
-                
-                
+        
                 analyzeStatement(whileStmt->body, metrics);
                 break;
             }
@@ -95,15 +86,11 @@ private:
                 ForStatement* forStmt = (ForStatement*)stmt;
                 metrics.loopCount++;
                 
-                
                 analyzeStatement(forStmt->initialization, metrics);
-                
                 
                 analyzeExpression(forStmt->condition, metrics);
                 
-                
                 analyzeStatement(forStmt->increment, metrics);
-                
                 
                 long long iterations = estimateForLoopIterations(forStmt);
                 if (metrics.estimatediterationCount == 0) {
@@ -112,7 +99,6 @@ private:
                     
                     metrics.estimatediterationCount *= iterations;
                 }
-                
                 
                 analyzeStatement(forStmt->body, metrics);
                 break;
@@ -127,11 +113,9 @@ private:
             case StatementType::DECLARATION_STATEMENT: {
                 DeclarationStatement* decl = (DeclarationStatement*)stmt;
                 
-                
                 if (decl->isArray) {
                     metrics.allocationCount++;
                 }
-                
                 
                 analyzeExpression(decl->initialValue, metrics);
                 break;
