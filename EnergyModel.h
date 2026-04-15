@@ -1,66 +1,52 @@
-#ifndef ENERGY_MODEL_H
-#define ENERGY_MODEL_H
+#ifndef ENERGY_H
+#define ENERGY_H
 
-struct FunctionMetrics{
+struct Metrics{
     int loc=0;
-    int comparisonCount=0;
-    int arithmeticCount=0;
-    int logicalCount=0;
-    int inputOutputCount=0;
-    int bitwiseCount=0;
-    int memoryAccessCount=0;
-    int allocationCount=0;
+    int compCount=0;
+    int arithCount=0;
+    int logicCount=0;
+    int ioCount=0;
+    int bitCount=0;
+    int memCount=0;
+    int allocCount=0;
     int loopCount=0;
-    int recursionFlag=0;
-    int functionCallCount=0;
-    long long estimatediterationCount=0;
-    double energyConsumption=0.0;
+    int recursion=0;
+    int callCount=0;
+    long long iterCount=0;
+    double energy=0.0;
 };
+
 struct EnergyModel{
-    double energyPerComparison=0.5;
-    double energyPerArithmetic=0.3;
-    double energyPerLogical=0.2;
-    double energyPerInputOutput=1.0;
-    double energyPerBitwise=0.4;
-    double energyPerMemoryAccess=0.6;
-    double energyPerAllocation=2.0;
-    double energyPerFunctionCall=0.8;
-    double energyPerlineOfCode=0.05;
+    double compCost=0.5;
+    double arithCost=0.3;
+    double logicCost=0.2;
+    double ioCost=1.0;
+    double bitCost=0.4;
+    double memCost=0.6;
+    double allocCost=2.0;
+    double callCost=0.8;
+    double locCost=0.05;
 
-double computeEnergy(const FunctionMetrics& metrics){
-    if(metrics.loc == 0) return 0.0;
-    if(metrics.estimatediterationCount>0){
-        double LoopEnergy = (metrics.arithmeticCount + metrics.logicalCount +  metrics.bitwiseCount + metrics.memoryAccessCount) *
-                                 energyPerArithmetic * metrics.estimatediterationCount;
-                                
-            return LoopEnergy +
-                   (metrics.comparisonCount * energyPerComparison) +
-                   (metrics.inputOutputCount * energyPerInputOutput) +
-                   (metrics.allocationCount * energyPerAllocation) +
-                   (metrics.loc * energyPerlineOfCode) +
-                   (metrics.functionCallCount * energyPerFunctionCall);
-
+    double compute(const Metrics& m){
+        if(m.loc == 0) return 0.0;
+        
+        if(m.iterCount>0){
+            double loopEnergy = (m.arithCount + m.logicCount + m.bitCount + m.memCount) * arithCost * m.iterCount;
+            return loopEnergy + (m.compCount * compCost) + (m.ioCount * ioCost) + 
+                   (m.allocCount * allocCost) + (m.loc * locCost) + (m.callCount * callCost);
         }
-        if (metrics.recursionFlag){
-            double RecursionEnergy = (metrics.arithmeticCount + metrics.logicalCount +   metrics.bitwiseCount + metrics.memoryAccessCount) *
-                                      energyPerArithmetic * 10;//recursion depth= 10
-            return RecursionEnergy +
-                   (metrics.comparisonCount * energyPerComparison) +
-                   (metrics.inputOutputCount * energyPerInputOutput) +
-                   (metrics.allocationCount * energyPerAllocation) +
-                   (metrics.loc * energyPerlineOfCode) +
-                   (metrics.functionCallCount * energyPerFunctionCall);
+        
+        if (m.recursion){
+            double recEnergy = (m.arithCount + m.logicCount + m.bitCount + m.memCount) * arithCost * 10;
+            return recEnergy + (m.compCount * compCost) + (m.ioCount * ioCost) + 
+                   (m.allocCount * allocCost) + (m.loc * locCost) + (m.callCount * callCost);
         }
-        return (metrics.comparisonCount * energyPerComparison) +
-               (metrics.arithmeticCount * energyPerArithmetic) +
-               (metrics.logicalCount * energyPerLogical) +
-               (metrics.inputOutputCount * energyPerInputOutput) +
-               (metrics.bitwiseCount * energyPerBitwise) +
-               (metrics.memoryAccessCount * energyPerMemoryAccess) +
-               (metrics.allocationCount * energyPerAllocation) +
-               (metrics.loc * energyPerlineOfCode) +
-               (metrics.functionCallCount * energyPerFunctionCall);
-
-    };
+        
+        return (m.compCount * compCost) + (m.arithCount * arithCost) + (m.logicCount * logicCost) +
+               (m.ioCount * ioCost) + (m.bitCount * bitCost) + (m.memCount * memCost) +
+               (m.allocCount * allocCost) + (m.loc * locCost) + (m.callCount * callCost);
+    }
 };
+
 #endif

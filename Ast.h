@@ -1,209 +1,193 @@
 #ifndef AST_H
 #define AST_H
 
-#include <bits/stdc++.h>
+#include<bits/stdc++.h>
 using namespace std;
 
-struct FunctionDefinition {
-    string returnType;
-    string functionName;
-    vector<pair<string, string>> parameters; 
-    BlockStatement* body;
-
-    int lineNumber=0;
-    FunctionDefinition() : body(nullptr) {}
+enum class ExprType {
+    IDENTIFIER,
+    NUMBER,
+    STRING,
+    UNARY,
+    BINARY,
+    CALL,
+    ARRAY_ACCESS,
 };
 
-enum class ExpressionType{
-    IDENTIFIER, 
-    NUMBER, 
-    STRING, 
-    UNARY_OP, 
-    BINARY_OP, 
-    FUNCTION_CALL, 
-    INDEXING, 
-    ARRAY_ACCESS
+struct Expr {
+    ExprType type;
+    string value;
+    vector<Expr*> children;
 };
 
-struct Expression {
-    ExpressionType type;
-    string value; 
-    vector<Expression> children; 
-};
-
-struct IdentifierExpression : Expression{
+struct IdentExpr : Expr {
     string name;
-    IdentifierExpression(const string& name) : name(name) {
-        type = ExpressionType::IDENTIFIER;
-        value = name;
+    IdentExpr(const string& n) : name(n) {
+        type = ExprType::IDENTIFIER;
+        value = n;
     }
 };
 
-struct NumberExpression : Expression{
+struct NumExpr : Expr {
     string number;
-    NumberExpression(const string& number) : number(number) {
-        type = ExpressionType::NUMBER;
-        value = number;
+    NumExpr(const string& num) : number(num) {
+        type = ExprType::NUMBER;
+        value = num;
     }
 };
 
-struct StringExpression : Expression{
+struct StrExpr : Expr {
     string str;
-    StringExpression(const string& str) : str(str) {
-        type = ExpressionType::STRING;
-        value = str;
+    StrExpr(const string& s) : str(s) {
+        type = ExprType::STRING;
+        value = s;
     }
 };
 
-struct UnaryOpExpression : Expression{
+struct UnaryExpr : Expr {
     string op;
-    Expression* operand;
-    UnaryOpExpression(const string& op, Expression* operand) : op(op), operand(operand) {
-        type = ExpressionType::UNARY_OP;
-        value = op;
-        children.push_back(*operand);
+    Expr* operand;
+    UnaryExpr(const string& oper, Expr* expr) : op(oper), operand(expr) {
+        type = ExprType::UNARY;
+        value = oper;
+        children.push_back(operand);
     }
 };
 
-struct BinaryOpExpression : Expression{
+struct BinExpr : Expr {
     string op;
-    Expression* left;
-    Expression* right;
-    BinaryOpExpression(const string& op, Expression* left, Expression* right) : op(op), left(left), right(right) {
-        type = ExpressionType::BINARY_OP;
-        value = op;
-        children.push_back(*left);
-        children.push_back(*right);
+    Expr* left;
+    Expr* right;
+    BinExpr(Expr* l, const string& oper, Expr* r) 
+        : op(oper), left(l), right(r) {
+        type = ExprType::BINARY;
+        value = oper;
+        children.push_back(left);
+        children.push_back(right);
     }
 };
 
-struct FunctionCallExpression : Expression{
-    string functionName;
-    vector<Expression*> arguments;
-    FunctionCallExpression(const string& functionName, const vector<Expression*>& arguments) : functionName(functionName), arguments(arguments) {
-        type = ExpressionType::FUNCTION_CALL;
-        value = functionName;
-        for(auto arg : arguments){
-            children.push_back(*arg);
-        }
+struct CallExpr : Expr {
+    string funcName;
+    vector<Expr*> args;
+    CallExpr(const string& fname) : funcName(fname) {
+        type = ExprType::CALL;
+        value = fname;
     }
 };
 
-struct IndexingExpression : Expression{
-    Expression* array;
-    Expression* index;
-    IndexingExpression(Expression* array, Expression* index) : array(array), index(index) {
-        type = ExpressionType::INDEXING;
-        value = "[]";
-        children.push_back(*array);
-        children.push_back(*index);
+struct ArrExpr : Expr {
+    Expr* arrayName;
+    Expr* index;
+    ArrExpr(Expr* arr, Expr* idx) 
+        : arrayName(arr), index(idx) {
+        type = ExprType::ARRAY_ACCESS;
+        children.push_back(arrayName);
+        children.push_back(index);
     }
 };
 
-struct ArrayAccessExpression : Expression{
-    Expression* arrayName;
-    Expression* index;
-    ArrayAccessExpression(Expression* arrayName, Expression* index) : arrayName(arrayName), index(index) {
-        type = ExpressionType::ARRAY_ACCESS;
-        children.push_back(*arrayName);
-        children.push_back(*index);
+enum class StmtType {
+    EXPRESSION,
+    DECLARATION,
+    RETURN,
+    IF,
+    WHILE,
+    FOR,
+    BLOCK,
+    BREAK,
+    CONTINUE,
+};
+
+struct Stmt {
+    StmtType type;
+    int line = 0;
+    vector<Stmt*> children;
+};
+
+struct ExprStmt : Stmt {
+    Expr* expr;
+    ExprStmt(Expr* e) : expr(e) {
+        type = StmtType::EXPRESSION;
     }
 };
 
-enum class StatementType{
-    EXPRESSION_STATEMENT, 
-    DECLARATION_STATEMENT, 
-    ASSIGNMENT_STATEMENT, 
-    RETURN_STATEMENT, 
-    IF_STATEMENT, 
-    WHILE_STATEMENT, 
-    FOR_STATEMENT, 
-    BREAK_STATEMENT, 
-    CONTINUE_STATEMENT,
-    BLOCK_STATEMENT
-};
-
-struct Statement {
-    StatementType type;
-    int lineNumber=0;
-    vector<Statement*> children;
-};
-
-struct ExpressionStatement : Statement{
-    Expression* expression;
-    ExpressionStatement(Expression* expression) : expression(expression) {
-        type = StatementType::EXPRESSION_STATEMENT;
-    }
-};
-
-struct DeclarationStatement : Statement{
+struct DeclStmt : Stmt {
     string varType;
     string varName;
-    Expression* initialValue;
-    int arraySize=-1;
-    bool isArray=false;
-    DeclarationStatement(const string& varType, const string& varName, Expression* initialValue = nullptr) 
-        : varType(varType), varName(varName), initialValue(initialValue) {
-        type = StatementType::DECLARATION_STATEMENT;
+    Expr* init;
+    bool isArray = false;
+    int arraySize = 0;
+    
+    DeclStmt(const string& vType, const string& vName, Expr* i = nullptr)
+        : varType(vType), varName(vName), init(i) {
+        type = StmtType::DECLARATION;
     }
 };
 
-struct ReturnStatement : Statement{
-    Expression* returnValue;
-    ReturnStatement(Expression* returnValue = nullptr) : returnValue(returnValue) {
-        type = StatementType::RETURN_STATEMENT;
+struct RetStmt : Stmt {
+    Expr* retExpr;
+    RetStmt(Expr* expr = nullptr) : retExpr(expr) {
+        type = StmtType::RETURN;
     }
 };
 
-struct IfStatement : Statement{
-    Expression* condition;
-    Statement* thenBranch;
-    Statement* elseBranch;
-    IfStatement(Expression* condition, Statement* thenBranch, Statement* elseBranch = nullptr) 
-        : condition(condition), thenBranch(thenBranch), elseBranch(elseBranch) {
-        type = StatementType::IF_STATEMENT;
+struct BlockStmt : Stmt {
+    vector<Stmt*> statements;
+    BlockStmt() {
+        type = StmtType::BLOCK;
     }
 };
 
-struct WhileStatement : Statement{
-    Expression* condition;
-    Statement* body;
-    WhileStatement(Expression* condition, Statement* body) : condition(condition), body(body) {
-        type = StatementType::WHILE_STATEMENT;
+struct IfStmt : Stmt {
+    Expr* cond;
+    Stmt* thenPart;
+    Stmt* elsePart;
+    IfStmt(Expr* c, Stmt* t, Stmt* e = nullptr)
+        : cond(c), thenPart(t), elsePart(e) {
+        type = StmtType::IF;
     }
 };
 
-struct ForStatement : Statement{
-    Statement* initialization;
-    Expression* condition;
-    Statement* increment;
-    Statement* body;
-    ForStatement(Statement* initialization, Expression* condition, Statement* increment, Statement* body) 
-        : initialization(initialization), condition(condition), increment(increment), body(body) {
-        type = StatementType::FOR_STATEMENT;
+struct WhileStmt : Stmt {
+    Expr* cond;
+    Stmt* body;
+    WhileStmt(Expr* c, Stmt* b) : cond(c), body(b) {
+        type = StmtType::WHILE;
     }
 };
 
-struct BreakStatement : Statement{
-    BreakStatement() {
-        type = StatementType::BREAK_STATEMENT;
+struct ForStmt : Stmt {
+    Stmt* init;
+    Expr* cond;
+    Expr* inc;
+    Stmt* body;
+    ForStmt(Stmt* i, Expr* c, Expr* inc, Stmt* b)
+        : init(i), cond(c), inc(inc), body(b) {
+        type = StmtType::FOR;
     }
 };
 
-struct ContinueStatement : Statement{
-    ContinueStatement() {
-        type = StatementType::CONTINUE_STATEMENT;
+struct BreakStmt : Stmt {
+    BreakStmt() {
+        type = StmtType::BREAK;
     }
 };
 
-struct BlockStatement : Statement{
-    vector<Statement*> statements;
-    BlockStatement() {
-        type = StatementType::BLOCK_STATEMENT;
+struct ContinueStmt : Stmt {
+    ContinueStmt() {
+        type = StmtType::CONTINUE;
     }
 };
 
-#endif 
+struct Function {
+    string retType;
+    string name;
+    vector<pair<string, string>> params;
+    BlockStmt* body;
+    int line = 0;
+    
+    Function() : body(nullptr) {}
+};
 
-
-
+#endif

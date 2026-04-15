@@ -1,261 +1,199 @@
-#ifndef Analyzer.h
-#define Analyzer_h
+#ifndef ANALYZER_H
+#define ANALYZER_H
 
-#include "Ast.h"
+#include "AST.h"
+#include "ASTVisitor.h"
 #include "EnergyModel.h"
-
 #include<bits/stdc++.h>
 using namespace std;
 
-
-class ASTAnalyzer {
+class EnergyAnalysisVisitor : public ASTVisitor {
 public:
+    EnergyAnalysisVisitor() : currentFunctionName(""), loopDepth(0) {}
     
     FunctionMetrics analyzeFunction(FunctionDefinition* func) {
-        FunctionMetrics metrics;
-        currentFunctionName = func->functionName;
-        allFunctionNames.clear();
-        
+        metrics = FunctionMetrics();
+        currentFunctionName = func->name;
+        loopDepth = 0;
         
         if (func->body) {
-            analyzeStatement(func->body, metrics);
+            visitFunctionDefinition(func);
         }
         
         return metrics;
     }
     
-    
     void setAllFunctions(const vector<FunctionDefinition*>& functions) {
         allFunctionNames.clear();
         for (auto* func : functions) {
-            allFunctionNames.insert(func->functionName);
+            allFunctionNames.insert(func->name);
         }
+    }
+    
+    void visitBinaryExpression(BinaryExpression* expr) override {
+        if (isArithmeticOp(expr->op)) {
+            metrics.arithmeticCount++;
+        } 
+        else if (isComparisonOp(expr->op)) {
+            metrics.comparisonCount++;
+        } 
+        else if (isLogicalOp(expr->op)) {
+            metrics.logicalCount++;
+        } 
+        else if (isBitwiseOp(expr->op)) {
+            metrics.bitwiseCount++;
+        }
+        
+        ASTVisitor::visitBinaryExpression(expr);
+    }
+    
+    void visitUnaryExpression(UnaryExpression* expr) override {
+        if (expr->op == "*" || expr->op == "&") {
+            metrics.memoryAccessCount++;
+        } 
+        else if (expr->op == "!") {
+            metrics.logicalCount++;
+        } 
+        else if (expr->op == "~") {
+            metrics.bitwiseCount++;
+        } 
+        else {
+            metrics.arithmeticCount++;
+        }
+        
+        ASTVisitor::visitUnaryExpression(expr);
+    }
+    
+    void visitCallExpression(CallExpression* expr) override {
+        metrics.functionCallCount++;
+        
+        if (isIOFunction(expr->functionName)) {
+            metrics.inputOutputCount++;
+        }
+        
+        if (isAllocationFunction(expr->functionName)) {
+            metrics.allocationCount++;
+        }
+        
+        if (expr->functionName == currentFunctionName) {
+            metrics.recursionFlag = 1;
+        }
+        
+        ASTVisitor::visitCallExpression(expr);
+    }
+    
+    void visitArrayAccessExpression(ArrayAccessExpression* expr) override {
+        metrics.memoryAccessCount++;
+        ASTVisitor::visitArrayAccessExpression(expr);
+    }
+    
+    void visitBlockStatement(BlockStatement* stmt) override {
+        for (auto* s : stmt->statements) {
+            visitStatement(s);
+        }
+    }
+    
+    void visitIfStatement(IfStatement* stmt) override {
+        metrics.loc++;
+        
+        if (stmt->condition) {
+            visitExpression(stmt->condition);
+            metrics.comparisonCount++;
+        }
+        
+        if (stmt->thenBranch) visitStatement(stmt->thenBranch);
+        if (stmt->elseBranch) visitStatement(stmt->elseBranch);
+    }
+    
+    void visitWhileStatement(WhileStatement* stmt) override {
+        metrics.loc++;
+        metrics.loopCount++;
+        loopDepth++;
+        
+        long long iterations = 10;
+        if (metrics.estimatediterationCount == 0) {
+            metrics.estimatediterationCount = iterations;
+        } else {
+            metrics.estimatediterationCount *= iterations;
+        }
+        
+        if (stmt->condition) visitExpression(stmt->condition);
+        if (stmt->body) visitStatement(stmt->body);
+        
+        loopDepth--;
+    }
+    
+    void visitForStatement(ForStatement* stmt) override {
+        metrics.loc++;
+        metrics.loopCount++;
+        loopDepth++;
+        
+        long long iterations = estimateForLoopIterations(stmt);
+        if (metrics.estimatediterationCount == 0) {
+            metrics.estimatediterationCount = iterations;
+        } else {
+            metrics.estimatediterationCount *= iterations;
+        }
+        
+        if (stmt->init) visitStatement(stmt->init);
+        if (stmt->condition) visitExpression(stmt->condition);
+        if (stmt->increment) visitExpression(stmt->increment);
+        if (stmt->body) visitStatement(stmt->body);
+        
+        loopDepth--;
+    }
+    
+    void visitReturnStatement(ReturnStatement* stmt) override {
+        metrics.loc++;
+        if (stmt->returnExpr) visitExpression(stmt->returnExpr);
+    }
+    
+    void visitDeclarationStatement(DeclarationStatement* stmt) override {
+        metrics.loc++;
+        
+        if (stmt->isArray) {
+            metrics.allocationCount++;
+        }
+        
+        if (stmt->initializer) visitExpression(stmt->initializer);
+    }
+    
+    void visitExpressionStatement(ExpressionStatement* stmt) override {
+        metrics.loc++;
+        if (stmt->expr) visitExpression(stmt->expr);
+    }
+    
+    void visitBreakStatement(BreakStatement* stmt) override {
+        metrics.loc++;
+    }
+    
+    void visitContinueStatement(ContinueStatement* stmt) override {
+        metrics.loc++;
     }
 
 private:
+    FunctionMetrics metrics;
     string currentFunctionName;
     unordered_set<string> allFunctionNames;
-    
-    void analyzeStatement(Statement* stmt, FunctionMetrics& metrics) {
-        if (!stmt) return;
-        
-        metrics.loc++;
-        
-        switch (stmt->type) {
-            case StatementType::BLOCK_STATEMENT: {
-                BlockStatement* block = (BlockStatement*)stmt;
-                
-                metrics.loc--;
-                for (auto* s : block->statements) {
-                    analyzeStatement(s, metrics);
-                }
-                break;
-            }
-            
-            case StatementType::IF_STATEMENT: {
-                IfStatement* ifStmt = (IfStatement*)stmt;
-                
-                analyzeExpression(ifStmt->condition, metrics);
-                metrics.comparisonCount++; 
-                
-                analyzeStatement(ifStmt->thenBranch, metrics);
-                
-                if (ifStmt->elseBranch) {
-                    analyzeStatement(ifStmt->elseBranch, metrics);
-                }
-                break;
-            }
-            
-            case StatementType::WHILE_STATEMENT: {
-                WhileStatement* whileStmt = (WhileStatement*)stmt;
-                metrics.loopCount++;
-                
-                analyzeExpression(whileStmt->condition, metrics);
-                
-                if (metrics.estimatediterationCount == 0) {
-                    metrics.estimatediterationCount = 10;
-                } else {
-                    metrics.estimatediterationCount *= 10;
-                }
-        
-                analyzeStatement(whileStmt->body, metrics);
-                break;
-            }
-            
-            case StatementType::FOR_STATEMENT: {
-                ForStatement* forStmt = (ForStatement*)stmt;
-                metrics.loopCount++;
-                
-                analyzeStatement(forStmt->initialization, metrics);
-                
-                analyzeExpression(forStmt->condition, metrics);
-                
-                analyzeStatement(forStmt->increment, metrics);
-                
-                long long iterations = estimateForLoopIterations(forStmt);
-                if (metrics.estimatediterationCount == 0) {
-                    metrics.estimatediterationCount = iterations;
-                } else {
-                    
-                    metrics.estimatediterationCount *= iterations;
-                }
-                
-                analyzeStatement(forStmt->body, metrics);
-                break;
-            }
-            
-            case StatementType::RETURN_STATEMENT: {
-                ReturnStatement* retStmt = (ReturnStatement*)stmt;
-                analyzeExpression(retStmt->returnValue, metrics);
-                break;
-            }
-            
-            case StatementType::DECLARATION_STATEMENT: {
-                DeclarationStatement* decl = (DeclarationStatement*)stmt;
-                
-                if (decl->isArray) {
-                    metrics.allocationCount++;
-                }
-                
-                analyzeExpression(decl->initialValue, metrics);
-                break;
-            }
-            
-            case StatementType::EXPRESSION_STATEMENT: {
-                ExpressionStatement* exprStmt = (ExpressionStatement*)stmt;
-                analyzeExpression(exprStmt->expression, metrics);
-                break;
-            }
-            
-            case StatementType::BREAK_STATEMENT:
-            case StatementType::CONTINUE_STATEMENT:
-                
-                break;
-        }
-    }
-    
-    
-    void analyzeExpression(Expression* expr, FunctionMetrics& metrics) {
-        if (!expr) return;
-        
-        switch (expr->type) {
-            case ExpressionType::BINARY_OP: {
-                BinaryOpExpression* binExpr = (BinaryOpExpression*)expr;
-                
-                
-                if (isArithmeticOp(binExpr->op)) {
-                    metrics.arithmeticCount++;
-                } 
-                else if (isComparisonOp(binExpr->op)) {
-                    metrics.comparisonCount++;
-                } 
-                else if (isLogicalOp(binExpr->op)) {
-                    metrics.logicalCount++;
-                } 
-                else if (isBitwiseOp(binExpr->op)) {
-                    metrics.bitwiseCount++;
-                }
-                
-                
-                analyzeExpression(binExpr->left, metrics);
-                analyzeExpression(binExpr->right, metrics);
-                break;
-            }
-            
-            case ExpressionType::UNARY_OP: {
-                UnaryOpExpression* unExpr = (UnaryOpExpression*)expr;
-                
-                
-                if (unExpr->op == "*" || unExpr->op == "&") {
-                    metrics.memoryAccessCount++;
-                } 
-                
-                else if (unExpr->op == "!") {
-                    metrics.logicalCount++;
-                } 
-                
-                else if (unExpr->op == "~") {
-                    metrics.bitwiseCount++;
-                } 
-                
-                else {
-                    metrics.arithmeticCount++;
-                }
-                
-                
-                analyzeExpression(unExpr->operand, metrics);
-                break;
-            }
-            
-            case ExpressionType::FUNCTION_CALL: {
-                FunctionCallExpression* callExpr = (FunctionCallExpression*)expr;
-                metrics.functionCallCount++;
-                
-                
-                if (isIOFunction(callExpr->functionName)) {
-                    metrics.inputOutputCount++;
-                }
-                
-                
-                if (isAllocationFunction(callExpr->functionName)) {
-                    metrics.allocationCount++;
-                }
-                
-                
-                if (callExpr->functionName == currentFunctionName) {
-                    metrics.recursionFlag = 1;
-                }
-                
-                
-                for (auto* arg : callExpr->arguments) {
-                    analyzeExpression(arg, metrics);
-                }
-                break;
-            }
-            
-            case ExpressionType::ARRAY_ACCESS: {
-                ArrayAccessExpression* arrExpr = (ArrayAccessExpression*)expr;
-                
-                metrics.memoryAccessCount++;
-                
-                
-                analyzeExpression(arrExpr->arrayName, metrics);
-                analyzeExpression(arrExpr->index, metrics);
-                break;
-            }
-            
-            case ExpressionType::IDENTIFIER:
-            case ExpressionType::NUMBER:
-            case ExpressionType::STRING:
-                
-                break;
-        }
-    }
-    
+    int loopDepth;
     
     long long estimateForLoopIterations(ForStatement* forStmt) {
+        if (!forStmt->condition) return 10;
         
-        
-        
-        if (!forStmt->condition) return 10; 
-        
-        
-        if (forStmt->condition->type == ExpressionType::BINARY_OP) {
-            BinaryOpExpression* condExpr = (BinaryOpExpression*)forStmt->condition;
-            
+        if (forStmt->condition->type == ExpressionType::BINARY) {
+            BinaryExpression* condExpr = (BinaryExpression*)forStmt->condition;
             
             if (condExpr->op == "<" || condExpr->op == "<=") {
                 if (condExpr->right && condExpr->right->type == ExpressionType::NUMBER) {
                     NumberExpression* numExpr = (NumberExpression*)condExpr->right;
                     try {
                         long long bound = stoll(numExpr->number);
-                        
-                        
                         long long start = 0;
-                        if (forStmt->initialization && forStmt->initialization->type == StatementType::DECLARATION_STATEMENT) {
-                            DeclarationStatement* decl = (DeclarationStatement*)forStmt->initialization;
-                            if (decl->initialValue && decl->initialValue->type == ExpressionType::NUMBER) {
-                                NumberExpression* initNum = (NumberExpression*)decl->initialValue;
+                        
+                        if (forStmt->init && forStmt->init->type == StatementType::DECLARATION) {
+                            DeclarationStatement* decl = (DeclarationStatement*)forStmt->init;
+                            if (decl->initializer && decl->initializer->type == ExpressionType::NUMBER) {
+                                NumberExpression* initNum = (NumberExpression*)decl->initializer;
                                 start = stoll(initNum->number);
                             }
                         }
@@ -263,72 +201,74 @@ private:
                         long long iterations = bound - start;
                         if (condExpr->op == "<=") iterations++;
                         
-                        return max(1LL, iterations); 
-                    } catch (...) {
-                        
-                    }
+                        return max(1LL, iterations);
+                    } catch (...) {}
                 }
             }
         }
         
-        return 10; 
+        return 10;
     }
-    
     
     bool isArithmeticOp(const string& op) {
-        static const unordered_set<string> arithmeticOps = {
-            "+", "-", "*", "/", "%",
-            "+=", "-=", "*=", "/=", "%=",
-            "++", "--"
+        static const unordered_set<string> ops = {
+            "+", "-", "*", "/", "%", "+=", "-=", "*=", "/=", "%=", "++", "--"
         };
-        return arithmeticOps.count(op) > 0;
+        return ops.count(op) > 0;
     }
-    
     
     bool isComparisonOp(const string& op) {
-        static const unordered_set<string> comparisonOps = {
+        static const unordered_set<string> ops = {
             "==", "!=", "<", ">", "<=", ">="
         };
-        return comparisonOps.count(op) > 0;
+        return ops.count(op) > 0;
     }
-    
     
     bool isLogicalOp(const string& op) {
-        static const unordered_set<string> logicalOps = {
-            "&&", "||", "!"
-        };
-        return logicalOps.count(op) > 0;
+        static const unordered_set<string> ops = {"&&", "||", "!"};
+        return ops.count(op) > 0;
     }
-    
     
     bool isBitwiseOp(const string& op) {
-        static const unordered_set<string> bitwiseOps = {
-            "&", "|", "^", "~", "<<", ">>",
-            "&=", "|=", "^=", "<<=", ">>="
+        static const unordered_set<string> ops = {
+            "&", "|", "^", "~", "<<", ">>", "&=", "|=", "^=", "<<=", ">>="
         };
-        return bitwiseOps.count(op) > 0;
+        return ops.count(op) > 0;
     }
     
-    
     bool isIOFunction(const string& funcName) {
-        static const unordered_set<string> ioFunctions = {
+        static const unordered_set<string> ioFuncs = {
             "printf", "scanf", "fprintf", "fscanf", "sprintf", "sscanf",
             "puts", "gets", "fgets", "fputs",
             "getchar", "putchar", "getc", "putc", "fgetc", "fputc",
             "fopen", "fclose", "fread", "fwrite", "fseek", "ftell",
             "cout", "cin", "cerr", "getline"
         };
-        return ioFunctions.count(funcName) > 0;
+        return ioFuncs.count(funcName) > 0;
     }
-    
     
     bool isAllocationFunction(const string& funcName) {
-        static const unordered_set<string> allocFunctions = {
-            "malloc", "calloc", "realloc", "free",
-            "new", "delete"
+        static const unordered_set<string> allocFuncs = {
+            "malloc", "calloc", "realloc", "free", "new", "delete"
         };
-        return allocFunctions.count(funcName) > 0;
+        return allocFuncs.count(funcName) > 0;
     }
+};
+
+class ASTAnalyzer {
+public:
+    FunctionMetrics analyzeFunction(FunctionDefinition* func) {
+        EnergyAnalysisVisitor visitor;
+        visitor.setAllFunctions(allFunctions);
+        return visitor.analyzeFunction(func);
+    }
+    
+    void setAllFunctions(const vector<FunctionDefinition*>& functions) {
+        allFunctions = functions;
+    }
+
+private:
+    vector<FunctionDefinition*> allFunctions;
 };
 
 #endif
