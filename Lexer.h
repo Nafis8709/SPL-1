@@ -19,9 +19,6 @@ struct Token {
 class Lexer {
 public:
     Lexer(const string& src) : sourceCode(src), length(sourceCode.size()), position(0), lineNumber(1), columnNumber(1) {}
-    
-    vector<Token> tokenize();
-    Token getNextToken();
 
 private:
     const string sourceCode;
@@ -183,17 +180,26 @@ private:
         text += quote;
         
         bool escaped = false;
-        while (true) {
+        while (position < length) {
             char c = peek();
             if (c == '\0') {
-                text += get();
-                break;
+                break;  // EOF reached unexpectedly
             }
+            
             char ch = get();
             text += ch;
-            if (!escaped && ch == quote) break;
-            if (!escaped && ch == '\\') escaped = true;
-            else escaped = false;
+            
+            // Check if we've found the closing quote (and it's not escaped)
+            if (!escaped && ch == quote) {
+                break;
+            }
+            
+            // Update escape flag
+            if (!escaped && ch == '\\') {
+                escaped = true;
+            } else {
+                escaped = false;
+            }
         }
         
         TokenType kind = (quote == '"') ? TokenType::STRING : TokenType::CHAR;

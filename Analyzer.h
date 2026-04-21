@@ -1,274 +1,197 @@
 #ifndef ANALYZER_H
 #define ANALYZER_H
 
-#include "AST.h"
-#include "ASTVisitor.h"
+#include "Ast.h"
+#include "AstVisitor.h"
 #include "EnergyModel.h"
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 using namespace std;
 
-class EnergyAnalysisVisitor : public ASTVisitor {
+class EnergyVisitor : public Visitor {
 public:
-    EnergyAnalysisVisitor() : currentFunctionName(""), loopDepth(0) {}
-    
-    FunctionMetrics analyzeFunction(FunctionDefinition* func) {
-        metrics = FunctionMetrics();
-        currentFunctionName = func->name;
+    EnergyVisitor() : curFunc(""), loopDepth(0) {}
+
+    Metrics analyze(Function* func) {
+        m = Metrics();
+        curFunc = func->name;
         loopDepth = 0;
-        
-        if (func->body) {
-            visitFunctionDefinition(func);
-        }
-        
-        return metrics;
-    }
-    
-    void setAllFunctions(const vector<FunctionDefinition*>& functions) {
-        allFunctionNames.clear();
-        for (auto* func : functions) {
-            allFunctionNames.insert(func->name);
-        }
-    }
-    
-    void visitBinaryExpression(BinaryExpression* expr) override {
-        if (isArithmeticOp(expr->op)) {
-            metrics.arithmeticCount++;
-        } 
-        else if (isComparisonOp(expr->op)) {
-            metrics.comparisonCount++;
-        } 
-        else if (isLogicalOp(expr->op)) {
-            metrics.logicalCount++;
-        } 
-        else if (isBitwiseOp(expr->op)) {
-            metrics.bitwiseCount++;
-        }
-        
-        ASTVisitor::visitBinaryExpression(expr);
-    }
-    
-    void visitUnaryExpression(UnaryExpression* expr) override {
-        if (expr->op == "*" || expr->op == "&") {
-            metrics.memoryAccessCount++;
-        } 
-        else if (expr->op == "!") {
-            metrics.logicalCount++;
-        } 
-        else if (expr->op == "~") {
-            metrics.bitwiseCount++;
-        } 
-        else {
-            metrics.arithmeticCount++;
-        }
-        
-        ASTVisitor::visitUnaryExpression(expr);
-    }
-    
-    void visitCallExpression(CallExpression* expr) override {
-        metrics.functionCallCount++;
-        
-        if (isIOFunction(expr->functionName)) {
-            metrics.inputOutputCount++;
-        }
-        
-        if (isAllocationFunction(expr->functionName)) {
-            metrics.allocationCount++;
-        }
-        
-        if (expr->functionName == currentFunctionName) {
-            metrics.recursionFlag = 1;
-        }
-        
-        ASTVisitor::visitCallExpression(expr);
-    }
-    
-    void visitArrayAccessExpression(ArrayAccessExpression* expr) override {
-        metrics.memoryAccessCount++;
-        ASTVisitor::visitArrayAccessExpression(expr);
-    }
-    
-    void visitBlockStatement(BlockStatement* stmt) override {
-        for (auto* s : stmt->statements) {
-            visitStatement(s);
-        }
-    }
-    
-    void visitIfStatement(IfStatement* stmt) override {
-        metrics.loc++;
-        
-        if (stmt->condition) {
-            visitExpression(stmt->condition);
-            metrics.comparisonCount++;
-        }
-        
-        if (stmt->thenBranch) visitStatement(stmt->thenBranch);
-        if (stmt->elseBranch) visitStatement(stmt->elseBranch);
-    }
-    
-    void visitWhileStatement(WhileStatement* stmt) override {
-        metrics.loc++;
-        metrics.loopCount++;
-        loopDepth++;
-        
-        long long iterations = 10;
-        if (metrics.estimatediterationCount == 0) {
-            metrics.estimatediterationCount = iterations;
-        } else {
-            metrics.estimatediterationCount *= iterations;
-        }
-        
-        if (stmt->condition) visitExpression(stmt->condition);
-        if (stmt->body) visitStatement(stmt->body);
-        
-        loopDepth--;
-    }
-    
-    void visitForStatement(ForStatement* stmt) override {
-        metrics.loc++;
-        metrics.loopCount++;
-        loopDepth++;
-        
-        long long iterations = estimateForLoopIterations(stmt);
-        if (metrics.estimatediterationCount == 0) {
-            metrics.estimatediterationCount = iterations;
-        } else {
-            metrics.estimatediterationCount *= iterations;
-        }
-        
-        if (stmt->init) visitStatement(stmt->init);
-        if (stmt->condition) visitExpression(stmt->condition);
-        if (stmt->increment) visitExpression(stmt->increment);
-        if (stmt->body) visitStatement(stmt->body);
-        
-        loopDepth--;
-    }
-    
-    void visitReturnStatement(ReturnStatement* stmt) override {
-        metrics.loc++;
-        if (stmt->returnExpr) visitExpression(stmt->returnExpr);
-    }
-    
-    void visitDeclarationStatement(DeclarationStatement* stmt) override {
-        metrics.loc++;
-        
-        if (stmt->isArray) {
-            metrics.allocationCount++;
-        }
-        
-        if (stmt->initializer) visitExpression(stmt->initializer);
-    }
-    
-    void visitExpressionStatement(ExpressionStatement* stmt) override {
-        metrics.loc++;
-        if (stmt->expr) visitExpression(stmt->expr);
-    }
-    
-    void visitBreakStatement(BreakStatement* stmt) override {
-        metrics.loc++;
-    }
-    
-    void visitContinueStatement(ContinueStatement* stmt) override {
-        metrics.loc++;
+        if (func->body) visitFunc(func);
+        return m;
     }
 
+    void setFuncs(const vector<Function*>& funcs) {
+        funcNames.clear();
+        for (auto* f : funcs) funcNames.insert(f->name);
+    }
+
+    void visitBinary(BinExpr* expr) override {
+        if (isArith(expr->op))       m.arithCount++;
+        else if (isCmp(expr->op))    m.compCount++;
+        else if (isLogic(expr->op))  m.logicCount++;
+        else if (isBit(expr->op))    m.bitCount++;
+        Visitor::visitBinary(expr);
+    }
+
+    void visitUnary(UnaryExpr* expr) override {
+        if (expr->op == "*" || expr->op == "&") m.memCount++;
+        else if (expr->op == "!")               m.logicCount++;
+        else if (expr->op == "~")               m.bitCount++;
+        else                                    m.arithCount++;
+        Visitor::visitUnary(expr);
+    }
+
+    void visitCall(CallExpr* expr) override {
+        m.callCount++;
+        if (isIO(expr->funcName))    m.ioCount++;
+        if (isAlloc(expr->funcName)) m.allocCount++;
+        if (expr->funcName == curFunc) m.recursion = 1;
+        Visitor::visitCall(expr);
+    }
+
+    void visitArray(ArrExpr* expr) override {
+        m.memCount++;
+        Visitor::visitArray(expr);
+    }
+
+    void visitBlock(BlockStmt* stmt) override {
+        for (auto* s : stmt->statements) visitStmt(s);
+    }
+
+    void visitIf(IfStmt* stmt) override {
+        m.loc++;
+        if (stmt->cond) { visitExpr(stmt->cond); m.compCount++; }
+        if (stmt->thenPart) visitStmt(stmt->thenPart);
+        if (stmt->elsePart) visitStmt(stmt->elsePart);
+    }
+
+    void visitWhile(WhileStmt* stmt) override {
+        m.loc++;
+        m.loopCount++;
+        loopDepth++;
+        long long iters = 10;
+        m.iterCount = (m.iterCount == 0) ? iters : m.iterCount * iters;
+        if (stmt->cond) visitExpr(stmt->cond);
+        if (stmt->body) visitStmt(stmt->body);
+        loopDepth--;
+    }
+
+    void visitFor(ForStmt* stmt) override {
+        m.loc++;
+        m.loopCount++;
+        loopDepth++;
+        long long iters = estimateFor(stmt);
+        m.iterCount = (m.iterCount == 0) ? iters : m.iterCount * iters;
+        if (stmt->init) visitStmt(stmt->init);
+        if (stmt->cond) visitExpr(stmt->cond);
+        if (stmt->inc)  visitExpr(stmt->inc);
+        if (stmt->body) visitStmt(stmt->body);
+        loopDepth--;
+    }
+
+    void visitRet(RetStmt* stmt) override {
+        m.loc++;
+        if (stmt->retExpr) visitExpr(stmt->retExpr);
+    }
+
+    void visitDecl(DeclStmt* stmt) override {
+        m.loc++;
+        if (stmt->isArray) m.allocCount++;
+        if (stmt->init) visitExpr(stmt->init);
+    }
+
+    void visitExprStmt(ExprStmt* stmt) override {
+        m.loc++;
+        if (stmt->expr) visitExpr(stmt->expr);
+    }
+
+    void visitBreak(BreakStmt* stmt) override    { m.loc++; }
+    void visitContinue(ContinueStmt* stmt) override { m.loc++; }
+
 private:
-    FunctionMetrics metrics;
-    string currentFunctionName;
-    unordered_set<string> allFunctionNames;
+    Metrics m;
+    string curFunc;
+    unordered_set<string> funcNames;
     int loopDepth;
-    
-    long long estimateForLoopIterations(ForStatement* forStmt) {
-        if (!forStmt->condition) return 10;
-        
-        if (forStmt->condition->type == ExpressionType::BINARY) {
-            BinaryExpression* condExpr = (BinaryExpression*)forStmt->condition;
-            
-            if (condExpr->op == "<" || condExpr->op == "<=") {
-                if (condExpr->right && condExpr->right->type == ExpressionType::NUMBER) {
-                    NumberExpression* numExpr = (NumberExpression*)condExpr->right;
+
+    long long estimateFor(ForStmt* s) {
+        if (!s->cond) return 10;
+        if (s->cond->type == ExprType::BINARY) {
+            BinExpr* cond = (BinExpr*)s->cond;
+            if (cond->op == "<" || cond->op == "<=") {
+                if (cond->right && cond->right->type == ExprType::NUMBER) {
+                    NumExpr* num = (NumExpr*)cond->right;
                     try {
-                        long long bound = stoll(numExpr->number);
+                        long long bound = stoll(num->number);
                         long long start = 0;
-                        
-                        if (forStmt->init && forStmt->init->type == StatementType::DECLARATION) {
-                            DeclarationStatement* decl = (DeclarationStatement*)forStmt->init;
-                            if (decl->initializer && decl->initializer->type == ExpressionType::NUMBER) {
-                                NumberExpression* initNum = (NumberExpression*)decl->initializer;
-                                start = stoll(initNum->number);
+                        if (s->init && s->init->type == StmtType::DECLARATION) {
+                            DeclStmt* decl = (DeclStmt*)s->init;
+                            if (decl->init && decl->init->type == ExprType::NUMBER) {
+                                start = stoll(((NumExpr*)decl->init)->number);
                             }
                         }
-                        
-                        long long iterations = bound - start;
-                        if (condExpr->op == "<=") iterations++;
-                        
-                        return max(1LL, iterations);
+                        long long iters = bound - start;
+                        if (cond->op == "<=") iters++;
+                        return max(1LL, iters);
                     } catch (...) {}
                 }
             }
         }
-        
         return 10;
     }
-    
-    bool isArithmeticOp(const string& op) {
-        static const unordered_set<string> ops = {
-            "+", "-", "*", "/", "%", "+=", "-=", "*=", "/=", "%=", "++", "--"
+
+    bool isArith(const string& op) {
+        static const unordered_set<string> s = {
+            "+","-","*","/","%","+=","-=","*=","/=","%=","++","--"
         };
-        return ops.count(op) > 0;
+        return s.count(op);
     }
-    
-    bool isComparisonOp(const string& op) {
-        static const unordered_set<string> ops = {
-            "==", "!=", "<", ">", "<=", ">="
+    bool isCmp(const string& op) {
+        static const unordered_set<string> s = {"==","!=","<",">","<=",">="};
+        return s.count(op);
+    }
+    bool isLogic(const string& op) {
+        static const unordered_set<string> s = {"&&","||","!"};
+        return s.count(op);
+    }
+    bool isBit(const string& op) {
+        static const unordered_set<string> s = {
+            "&","|","^","~","<<",">>","&=","|=","^=","<<=",">>="
         };
-        return ops.count(op) > 0;
+        return s.count(op);
     }
-    
-    bool isLogicalOp(const string& op) {
-        static const unordered_set<string> ops = {"&&", "||", "!"};
-        return ops.count(op) > 0;
-    }
-    
-    bool isBitwiseOp(const string& op) {
-        static const unordered_set<string> ops = {
-            "&", "|", "^", "~", "<<", ">>", "&=", "|=", "^=", "<<=", ">>="
+    bool isIO(const string& fn) {
+        static const unordered_set<string> s = {
+            "printf","scanf","fprintf","fscanf","sprintf","sscanf",
+            "puts","gets","fgets","fputs","getchar","putchar",
+            "getc","putc","fgetc","fputc","fopen","fclose",
+            "fread","fwrite","fseek","ftell","cout","cin","cerr","getline"
         };
-        return ops.count(op) > 0;
+        return s.count(fn);
     }
-    
-    bool isIOFunction(const string& funcName) {
-        static const unordered_set<string> ioFuncs = {
-            "printf", "scanf", "fprintf", "fscanf", "sprintf", "sscanf",
-            "puts", "gets", "fgets", "fputs",
-            "getchar", "putchar", "getc", "putc", "fgetc", "fputc",
-            "fopen", "fclose", "fread", "fwrite", "fseek", "ftell",
-            "cout", "cin", "cerr", "getline"
+    bool isAlloc(const string& fn) {
+        static const unordered_set<string> s = {
+            "malloc","calloc","realloc","free","new","delete"
         };
-        return ioFuncs.count(funcName) > 0;
-    }
-    
-    bool isAllocationFunction(const string& funcName) {
-        static const unordered_set<string> allocFuncs = {
-            "malloc", "calloc", "realloc", "free", "new", "delete"
-        };
-        return allocFuncs.count(funcName) > 0;
+        return s.count(fn);
     }
 };
 
-class ASTAnalyzer {
+class Analyzer {
 public:
-    FunctionMetrics analyzeFunction(FunctionDefinition* func) {
-        EnergyAnalysisVisitor visitor;
-        visitor.setAllFunctions(allFunctions);
-        return visitor.analyzeFunction(func);
+    Metrics analyze(Function* func) {
+        EnergyVisitor v;
+        v.setFuncs(allFuncs);
+        Metrics m = v.analyze(func);
+        m.energy = EnergyModel().compute(m);
+        return m;
     }
-    
-    void setAllFunctions(const vector<FunctionDefinition*>& functions) {
-        allFunctions = functions;
+
+    void setFuncs(const vector<Function*>& funcs) {
+        allFuncs = funcs;
     }
 
 private:
-    vector<FunctionDefinition*> allFunctions;
+    vector<Function*> allFuncs;
 };
 
 #endif

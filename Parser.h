@@ -2,31 +2,31 @@
 #define PARSER_H
 
 #include "Lexer.h"
-#include "AST.h"
+#include "Ast.h"
+#include <bits/stdc++.h>
+using namespace std;
 
 class Parser {
 public:
     Parser(const vector<Token>& toks) : tokens(toks), position(0) {}
-    
-    // Main parsing functions
-    vector<FunctionDefinition*> parseFunctions();
-    Expression* parseExpression();
-    
+
+    vector<Function*> parse();
+    Expr* parseExpr();
+
 private:
     const vector<Token>& tokens;
     int position;
-    
-    // Token manipulation
+
     Token peek(int offset = 0) const {
         int idx = position + offset;
         return idx < (int)tokens.size() ? tokens[idx] : tokens.back();
     }
-    
+
     Token get() {
         if (position >= (int)tokens.size()) return tokens.back();
         return tokens[position++];
     }
-    
+
     bool match(TokenType type, const string& text = "") {
         Token tok = peek();
         if (tok.type == type && (text.empty() || tok.text == text)) {
@@ -35,495 +35,433 @@ private:
         }
         return false;
     }
-    
+
     bool check(TokenType type, const string& text = "") const {
         Token tok = peek();
         return tok.type == type && (text.empty() || tok.text == text);
     }
 
-    // Expression parsing functions
-    Expression* parsePrimary();
-    Expression* parseUnary();
-    Expression* parseBinaryRHS(int exprPrec, Expression* lhs);
-    Expression* parsePostfix(Expression* expr);
-    int getTokenPrecedence();
-    
-    // Statement parsing functions
-    Statement* parseStatement();
-    Statement* parseBlockStatement();
-    Statement* parseIfStatement();
-    Statement* parseWhileStatement();
-    Statement* parseForStatement();
-    Statement* parseReturnStatement();
-    Statement* parseBreakStatement();
-    Statement* parseContinueStatement();
-    Statement* parseDeclarationStatement();
-    Statement* parseExpressionStatement();
-    
-    // Function parsing
-    FunctionDefinition* parseFunctionDefinition();
-    
-    // Helper functions
-    bool isTypeKeyword(const string& word) const {
-        return word == "int" || word == "long" || word == "short" || 
-               word == "char" || word == "float" || word == "double" || 
-               word == "void";
+    Expr* parsePrimary();
+    Expr* parseUnary();
+    Expr* parseBinaryRHS(int prec, Expr* lhs);
+    Expr* parsePostfix(Expr* expr);
+    int getPrec();
+
+    Stmt* parseStmt();
+    Stmt* parseBlock();
+    Stmt* parseIf();
+    Stmt* parseWhile();
+    Stmt* parseFor();
+    Stmt* parseReturn();
+    Stmt* parseBreak();
+    Stmt* parseContinue();
+    Stmt* parseDecl();
+    Stmt* parseExprStmt();
+
+    Function* parseFunc();
+
+    bool isType(const string& w) const {
+        return w == "int" || w == "long" || w == "short" ||
+               w == "char" || w == "float" || w == "double" || w == "void";
     }
 };
 
-// ============ EXPRESSION PARSING IMPLEMENTATION ============
-
-Expression* Parser::parsePrimary() {
+Expr* Parser::parsePrimary() {
     Token tok = peek();
-    
-    // Handle identifiers and function calls
+
     if (tok.type == TokenType::IDENTIFIER) {
         string name = get().text;
-        
-        // Check for function call
         if (check(TokenType::PUNCTUATION, "(")) {
-            get(); // consume '('
-            CallExpression* call = new CallExpression(name);
-            
-            // Parse function arguments
+            get();
+            CallExpr* call = new CallExpr(name);
             if (!check(TokenType::PUNCTUATION, ")")) {
                 while (true) {
-                    Expression* arg = parseExpression();
-                    if (arg) call->arguments.push_back(arg);
+                    Expr* arg = parseExpr();
+                    if (arg) call->args.push_back(arg);
                     if (!match(TokenType::PUNCTUATION, ",")) break;
                 }
             }
             match(TokenType::PUNCTUATION, ")");
             return call;
         }
-        
-        return new IdentifierExpression(name);
+        return new IdentExpr(name);
     }
-    
-    // Handle numbers
-    if (tok.type == TokenType::NUMBER) {
-        return new NumberExpression(get().text);
-    }
-    
-    // Handle strings
-    if (tok.type == TokenType::STRING) {
-        return new StringExpression(get().text);
-    }
-    
-    // Handle parenthesized expressions
+
+    if (tok.type == TokenType::NUMBER) return new NumExpr(get().text);
+    if (tok.type == TokenType::STRING) return new StrExpr(get().text);
+    if (tok.type == TokenType::CHAR) return new StrExpr(get().text);  // Handle CHAR tokens
+
     if (match(TokenType::PUNCTUATION, "(")) {
-        Expression* expr = parseExpression();
+        Expr* expr = parseExpr();
         match(TokenType::PUNCTUATION, ")");
         return expr;
     }
-    
+
     return nullptr;
 }
 
-Expression* Parser::parsePostfix(Expression* expr) {
-    // Handle array access: arr[index]
+Expr* Parser::parsePostfix(Expr* expr) {
     while (check(TokenType::PUNCTUATION, "[")) {
-        get(); // consume '['
-        Expression* index = parseExpression();
+        get();
+        Expr* idx = parseExpr();
         match(TokenType::PUNCTUATION, "]");
-        expr = new ArrayAccessExpression(expr, index);
+        expr = new ArrExpr(expr, idx);
     }
-    
-    // Handle post-increment and post-decrement
     if (check(TokenType::OPERATOR, "++") || check(TokenType::OPERATOR, "--")) {
         string op = get().text;
-        expr = new UnaryExpression(op, expr);
-    }
-    
-    return expr;
-}
-
-Expression* Parser::parseUnary() {
-    Token tok = peek();
-    
-    // Handle unary operators: +, -, !, ~, ++, --, *, &
-    if (tok.type == TokenType::OPERATOR && 
-        (tok.text == "+" || tok.text == "-" || tok.text == "!" || 
-         tok.text == "~" || tok.text == "++" || tok.text == "--" || 
-         tok.text == "*" || tok.text == "&")) {
-        get();
-        Expression* operand = parseUnary();
-        if (!operand) return nullptr;
-        return new UnaryExpression(tok.text, operand);
-    }
-    
-    // Parse primary and handle postfix operations
-    Expression* expr = parsePrimary();
-    if (expr) {
-        expr = parsePostfix(expr);
+        expr = new UnaryExpr(op, expr);
     }
     return expr;
 }
 
-int Parser::getTokenPrecedence() {
+Expr* Parser::parseUnary() {
     Token tok = peek();
-    if (tok.type != TokenType::OPERATOR) return -1;
     
-    // Operator precedence table (higher number = higher precedence)
-    static const unordered_map<string, int> precedences = {
-        {"=", 1}, {"+=", 1}, {"-=", 1}, {"*=", 1}, {"/=", 1}, {"%=", 1},
-        {"&=", 1}, {"|=", 1}, {"^=", 1}, {"<<=", 1}, {">>=", 1},
-        {"||", 2},
-        {"&&", 3},
-        {"|", 4},
-        {"^", 5},
-        {"&", 6},
-        {"==", 7}, {"!=", 7},
-        {"<", 8}, {">", 8}, {"<=", 8}, {">=", 8},
-        {"<<", 9}, {">>", 9},
-        {"+", 10}, {"-", 10},
-        {"*", 11}, {"/", 11}, {"%", 11}
-    };
-    
-    auto it = precedences.find(tok.text);
-    return it != precedences.end() ? it->second : -1;
-}
-
-Expression* Parser::parseBinaryRHS(int exprPrec, Expression* lhs) {
-    while (true) {
-        int tokPrec = getTokenPrecedence();
-        if (tokPrec < exprPrec) return lhs;
-        
-        Token opTok = get();
-        Expression* rhs = parseUnary();
-        if (!rhs) {
-            delete lhs;
-            return nullptr;
-        }
-        
-        int nextPrec = getTokenPrecedence();
-        if (tokPrec < nextPrec) {
-            rhs = parseBinaryRHS(tokPrec + 1, rhs);
-            if (!rhs) {
-                delete lhs;
-                return nullptr;
+    // Handle sizeof operator
+    if (tok.type == TokenType::KEYWORD && tok.text == "sizeof") {
+        get();  // consume "sizeof"
+        if (check(TokenType::PUNCTUATION, "(")) {
+            get();  // consume "("
+            // Skip the contents inside sizeof() until we find the matching ")"
+            int parenCount = 1;
+            while (parenCount > 0 && !check(TokenType::END_OF_FILE)) {
+                Token t = peek();
+                if (t.type == TokenType::PUNCTUATION && t.text == "(") {
+                    parenCount++;
+                } else if (t.type == TokenType::PUNCTUATION && t.text == ")") {
+                    parenCount--;
+                    if (parenCount == 0) {
+                        get();  // consume the final ")"
+                        break;
+                    }
+                }
+                get();
             }
         }
-        
-        lhs = new BinaryExpression(lhs, opTok.text, rhs);
+        // Return a dummy number expression for sizeof
+        return new NumExpr("1");
+    }
+    
+    if (tok.type == TokenType::OPERATOR &&
+        (tok.text == "+" || tok.text == "-" || tok.text == "!" ||
+         tok.text == "~" || tok.text == "++" || tok.text == "--" ||
+         tok.text == "*" || tok.text == "&")) {
+        get();
+        Expr* operand = parseUnary();
+        if (!operand) return nullptr;
+        return new UnaryExpr(tok.text, operand);
+    }
+    Expr* expr = parsePrimary();
+    if (expr) expr = parsePostfix(expr);
+    return expr;
+}
+
+int Parser::getPrec() {
+    Token tok = peek();
+    if (tok.type != TokenType::OPERATOR) return -1;
+    static const unordered_map<string, int> prec = {
+        {"=",1},{"+=",1},{"-=",1},{"*=",1},{"/=",1},{"%=",1},
+        {"&=",1},{"|=",1},{"^=",1},{"<<=",1},{">>=",1},
+        {"||",2},{"&&",3},{"|",4},{"^",5},{"&",6},
+        {"==",7},{"!=",7},
+        {"<",8},{">",8},{"<=",8},{">=",8},
+        {"<<",9},{">>",9},
+        {"+",10},{"-",10},
+        {"*",11},{"/",11},{"%",11}
+    };
+    auto it = prec.find(tok.text);
+    return it != prec.end() ? it->second : -1;
+}
+
+Expr* Parser::parseBinaryRHS(int exprPrec, Expr* lhs) {
+    while (true) {
+        int tokPrec = getPrec();
+        if (tokPrec < exprPrec) return lhs;
+        Token opTok = get();
+        Expr* rhs = parseUnary();
+        if (!rhs) { delete lhs; return nullptr; }
+        int nextPrec = getPrec();
+        if (tokPrec < nextPrec) {
+            rhs = parseBinaryRHS(tokPrec + 1, rhs);
+            if (!rhs) { delete lhs; return nullptr; }
+        }
+        lhs = new BinExpr(lhs, opTok.text, rhs);
     }
 }
 
-Expression* Parser::parseExpression() {
-    Expression* lhs = parseUnary();
+Expr* Parser::parseExpr() {
+    Expr* lhs = parseUnary();
     if (!lhs) return nullptr;
     return parseBinaryRHS(0, lhs);
 }
 
-// ============ STATEMENT PARSING IMPLEMENTATION ============
-
-Statement* Parser::parseBlockStatement() {
+Stmt* Parser::parseBlock() {
     if (!match(TokenType::PUNCTUATION, "{")) return nullptr;
-    
-    BlockStatement* block = new BlockStatement();
-    block->lineNumber = peek().lineNumber;
-    
-    // Parse all statements until we hit '}'
+    BlockStmt* block = new BlockStmt();
+    block->line = peek().lineNumber;
     while (!check(TokenType::PUNCTUATION, "}") && !check(TokenType::END_OF_FILE)) {
-        Statement* stmt = parseStatement();
-        if (stmt) {
-            block->statements.push_back(stmt);
-        }
+        Stmt* s = parseStmt();
+        if (s) block->statements.push_back(s);
     }
-    
     match(TokenType::PUNCTUATION, "}");
     return block;
 }
 
-Statement* Parser::parseIfStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseIf() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "if");
     match(TokenType::PUNCTUATION, "(");
-    
-    Expression* condition = parseExpression();
-    
+    Expr* cond = parseExpr();
     match(TokenType::PUNCTUATION, ")");
-    
-    Statement* thenBranch = parseStatement();
-    Statement* elseBranch = nullptr;
-    
-    // Parse optional else branch
-    if (match(TokenType::KEYWORD, "else")) {
-        elseBranch = parseStatement();
-    }
-    
-    IfStatement* ifStmt = new IfStatement(condition, thenBranch, elseBranch);
-    ifStmt->lineNumber = lineNum;
-    return ifStmt;
+    Stmt* thenPart = parseStmt();
+    Stmt* elsePart = nullptr;
+    if (match(TokenType::KEYWORD, "else")) elsePart = parseStmt();
+    IfStmt* s = new IfStmt(cond, thenPart, elsePart);
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseWhileStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseWhile() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "while");
     match(TokenType::PUNCTUATION, "(");
-    
-    Expression* condition = parseExpression();
-    
+    Expr* cond = parseExpr();
     match(TokenType::PUNCTUATION, ")");
-    
-    Statement* body = parseStatement();
-    
-    WhileStatement* whileStmt = new WhileStatement(condition, body);
-    whileStmt->lineNumber = lineNum;
-    return whileStmt;
+    Stmt* body = parseStmt();
+    WhileStmt* s = new WhileStmt(cond, body);
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseForStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseFor() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "for");
     match(TokenType::PUNCTUATION, "(");
-    
-    // Parse initialization (can be declaration or expression)
-    Statement* init = nullptr;
+
+    Stmt* init = nullptr;
     if (!check(TokenType::PUNCTUATION, ";")) {
-        if (isTypeKeyword(peek().text)) {
-            init = parseDeclarationStatement();
+        if (isType(peek().text)) {
+            init = parseDecl();
         } else {
-            Expression* initExpr = parseExpression();
+            Expr* e = parseExpr();
             match(TokenType::PUNCTUATION, ";");
-            if (initExpr) {
-                init = new ExpressionStatement(initExpr);
-            }
+            if (e) init = new ExprStmt(e);
         }
     } else {
         match(TokenType::PUNCTUATION, ";");
     }
-    
-    // Parse condition
-    Expression* condition = nullptr;
-    if (!check(TokenType::PUNCTUATION, ";")) {
-        condition = parseExpression();
-    }
+
+    Expr* cond = nullptr;
+    if (!check(TokenType::PUNCTUATION, ";")) cond = parseExpr();
     match(TokenType::PUNCTUATION, ";");
-    
-    // Parse increment
-    Expression* increment = nullptr;
-    if (!check(TokenType::PUNCTUATION, ")")) {
-        increment = parseExpression();
-    }
+
+    Expr* inc = nullptr;
+    if (!check(TokenType::PUNCTUATION, ")")) inc = parseExpr();
     match(TokenType::PUNCTUATION, ")");
-    
-    // Parse loop body
-    Statement* body = parseStatement();
-    
-    ForStatement* forStmt = new ForStatement(init, condition, increment, body);
-    forStmt->lineNumber = lineNum;
-    return forStmt;
+
+    Stmt* body = parseStmt();
+    ForStmt* s = new ForStmt(init, cond, inc, body);
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseReturnStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseReturn() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "return");
-    
-    Expression* expr = nullptr;
-    if (!check(TokenType::PUNCTUATION, ";")) {
-        expr = parseExpression();
-    }
-    
+    Expr* expr = nullptr;
+    if (!check(TokenType::PUNCTUATION, ";")) expr = parseExpr();
     match(TokenType::PUNCTUATION, ";");
-    
-    ReturnStatement* retStmt = new ReturnStatement(expr);
-    retStmt->lineNumber = lineNum;
-    return retStmt;
+    RetStmt* s = new RetStmt(expr);
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseBreakStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseBreak() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "break");
     match(TokenType::PUNCTUATION, ";");
-    
-    BreakStatement* breakStmt = new BreakStatement();
-    breakStmt->lineNumber = lineNum;
-    return breakStmt;
+    BreakStmt* s = new BreakStmt();
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseContinueStatement() {
-    int lineNum = peek().lineNumber;
+Stmt* Parser::parseContinue() {
+    int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "continue");
     match(TokenType::PUNCTUATION, ";");
-    
-    ContinueStatement* contStmt = new ContinueStatement();
-    contStmt->lineNumber = lineNum;
-    return contStmt;
+    ContinueStmt* s = new ContinueStmt();
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseDeclarationStatement() {
-    int lineNum = peek().lineNumber;
-    
-    // Parse type
+Stmt* Parser::parseDecl() {
+    int ln = peek().lineNumber;
     string varType = get().text;
     
-    // Parse variable name
+    // Parse first variable
     string varName = get().text;
-    
-    DeclarationStatement* decl = new DeclarationStatement(varType, varName);
-    decl->lineNumber = lineNum;
-    
-    // Check for array declaration: int arr[10]
-    if (check(TokenType::PUNCTUATION, "[")) {
-        get(); // consume '['
+    DeclStmt* decl = new DeclStmt(varType, varName);
+    decl->line = ln;
+
+    // Handle array declarations with multiple dimensions
+    while (check(TokenType::PUNCTUATION, "[")) {
+        get();
         decl->isArray = true;
-        
-        if (peek().type == TokenType::NUMBER) {
-            decl->arraySize = stoi(get().text);
+        // Parse array size expression (could be just a number or complex expression)
+        if (!check(TokenType::PUNCTUATION, "]")) {
+            Expr* sizeExpr = parseExpr();
+            if (sizeExpr && sizeExpr->type == ExprType::NUMBER && decl->arraySize == 0) {
+                decl->arraySize = stoi(sizeExpr->value);
+            }
         }
-        
         match(TokenType::PUNCTUATION, "]");
     }
-    
-    // Parse optional initializer: int x = 5
+
+    // Handle initializers (skip them for now)
     if (match(TokenType::OPERATOR, "=")) {
-        decl->initializer = parseExpression();
+        if (check(TokenType::PUNCTUATION, "{")) {
+            // Skip initializer list
+            get();  // consume "{"
+            int braceCount = 1;
+            while (braceCount > 0 && !check(TokenType::END_OF_FILE)) {
+                if (check(TokenType::PUNCTUATION, "{")) braceCount++;
+                else if (check(TokenType::PUNCTUATION, "}")) braceCount--;
+                get();
+            }
+        } else {
+            decl->init = parseExpr();
+        }
+    }
+    
+    // Handle multiple variable declarations separated by commas (e.g., int a, b, c;)
+    while (match(TokenType::PUNCTUATION, ",")) {
+        varName = get().text;
+        DeclStmt* nextDecl = new DeclStmt(varType, varName);
+        nextDecl->line = ln;
+        
+        // Handle arrays in comma-separated declarations
+        while (check(TokenType::PUNCTUATION, "[")) {
+            get();
+            nextDecl->isArray = true;
+            if (!check(TokenType::PUNCTUATION, "]")) {
+                Expr* sizeExpr = parseExpr();
+                if (sizeExpr && sizeExpr->type == ExprType::NUMBER && nextDecl->arraySize == 0) {
+                    nextDecl->arraySize = stoi(sizeExpr->value);
+                }
+            }
+            match(TokenType::PUNCTUATION, "]");
+        }
+        
+        if (match(TokenType::OPERATOR, "=")) nextDecl->init = parseExpr();
     }
     
     match(TokenType::PUNCTUATION, ";");
     return decl;
 }
 
-Statement* Parser::parseExpressionStatement() {
-    int lineNum = peek().lineNumber;
-    Expression* expr = parseExpression();
+Stmt* Parser::parseExprStmt() {
+    int ln = peek().lineNumber;
+    Expr* expr = parseExpr();
     match(TokenType::PUNCTUATION, ";");
-    
     if (!expr) return nullptr;
-    
-    ExpressionStatement* exprStmt = new ExpressionStatement(expr);
-    exprStmt->lineNumber = lineNum;
-    return exprStmt;
+    ExprStmt* s = new ExprStmt(expr);
+    s->line = ln;
+    return s;
 }
 
-Statement* Parser::parseStatement() {
-    // Block statement
-    if (check(TokenType::PUNCTUATION, "{")) {
-        return parseBlockStatement();
-    }
-    
-    // Control flow statements
-    if (check(TokenType::KEYWORD, "if")) {
-        return parseIfStatement();
-    }
-    if (check(TokenType::KEYWORD, "while")) {
-        return parseWhileStatement();
-    }
-    if (check(TokenType::KEYWORD, "for")) {
-        return parseForStatement();
-    }
-    if (check(TokenType::KEYWORD, "return")) {
-        return parseReturnStatement();
-    }
-    if (check(TokenType::KEYWORD, "break")) {
-        return parseBreakStatement();
-    }
-    if (check(TokenType::KEYWORD, "continue")) {
-        return parseContinueStatement();
-    }
-    
-    // Declaration statement (type followed by identifier)
-    if (isTypeKeyword(peek().text) && peek(1).type == TokenType::IDENTIFIER) {
-        return parseDeclarationStatement();
-    }
-    
-    // Expression statement (default)
-    return parseExpressionStatement();
+Stmt* Parser::parseStmt() {
+    if (check(TokenType::PUNCTUATION, "{"))    return parseBlock();
+    if (check(TokenType::KEYWORD, "if"))       return parseIf();
+    if (check(TokenType::KEYWORD, "while"))    return parseWhile();
+    if (check(TokenType::KEYWORD, "for"))      return parseFor();
+    if (check(TokenType::KEYWORD, "return"))   return parseReturn();
+    if (check(TokenType::KEYWORD, "break"))    return parseBreak();
+    if (check(TokenType::KEYWORD, "continue")) return parseContinue();
+    if (isType(peek().text) && peek(1).type == TokenType::IDENTIFIER) return parseDecl();
+    return parseExprStmt();
 }
 
-// ============ FUNCTION PARSING IMPLEMENTATION ============
+Function* Parser::parseFunc() {
+    Function* func = new Function();
+    func->line = peek().lineNumber;
 
-FunctionDefinition* Parser::parseFunctionDefinition() {
-    FunctionDefinition* func = new FunctionDefinition();
-    func->lineNumber = peek().lineNumber;
-    
-    // Parse return type
-    if (isTypeKeyword(peek().text)) {
-        func->returnType = get().text;
+    if (isType(peek().text)) {
+        func->retType = get().text;
     } else {
-        return nullptr; // Invalid function
+        delete func;
+        return nullptr;
     }
-    
-    // Parse function name
+
     if (peek().type == TokenType::IDENTIFIER) {
         func->name = get().text;
     } else {
         delete func;
         return nullptr;
     }
-    
-    // Parse parameters
+
     if (!match(TokenType::PUNCTUATION, "(")) {
         delete func;
         return nullptr;
     }
-    
-    // Parse parameter list
+
     while (!check(TokenType::PUNCTUATION, ")") && !check(TokenType::END_OF_FILE)) {
-        // Parse parameter type
-        if (!isTypeKeyword(peek().text)) break;
+        if (!isType(peek().text)) break;
         string paramType = get().text;
-        
-        // Handle array parameters: int arr[]
-        if (check(TokenType::PUNCTUATION, "[")) {
-            get(); // consume '['
-            match(TokenType::PUNCTUATION, "]");
-            paramType += "[]";
-        }
-        
-        // Parse parameter name
         string paramName = "";
+        
+        // Get parameter name if present
         if (peek().type == TokenType::IDENTIFIER) {
             paramName = get().text;
+            
+            // Skip array brackets after parameter name (e.g., "arr[]")
+            while (check(TokenType::PUNCTUATION, "[")) {
+                get();  // consume "["
+                if (check(TokenType::PUNCTUATION, "]")) {
+                    get();  // consume "]"
+                } else {
+                    break;
+                }
+            }
         }
         
-        func->parameters.push_back(make_pair(paramType, paramName));
-        
+        func->params.push_back({paramType, paramName});
         if (!match(TokenType::PUNCTUATION, ",")) break;
     }
-    
+
     match(TokenType::PUNCTUATION, ")");
-    
-    // Parse function body
-    func->body = (BlockStatement*)parseBlockStatement();
-    
+    func->body = (BlockStmt*)parseBlock();
+
     if (!func->body) {
         delete func;
         return nullptr;
     }
-    
+
     return func;
 }
 
-vector<FunctionDefinition*> Parser::parseFunctions() {
-    vector<FunctionDefinition*> functions;
-    
+vector<Function*> Parser::parse() {
+    vector<Function*> funcs;
+
     while (peek().type != TokenType::END_OF_FILE) {
-        // Skip preprocessor directives (#include, #define, etc.)
         if (check(TokenType::PUNCTUATION, "#")) {
-            int currentLine = peek().lineNumber;
-            while (peek().lineNumber == currentLine && peek().type != TokenType::END_OF_FILE) {
-                get();
-            }
+            int curLine = peek().lineNumber;
+            while (peek().lineNumber == curLine && peek().type != TokenType::END_OF_FILE) get();
             continue;
         }
-        
-        // Try to parse a function
-        if (isTypeKeyword(peek().text) && peek(1).type == TokenType::IDENTIFIER 
+        if (isType(peek().text) && peek(1).type == TokenType::IDENTIFIER
             && peek(2).type == TokenType::PUNCTUATION && peek(2).text == "(") {
-            
-            FunctionDefinition* func = parseFunctionDefinition();
+            Function* func = parseFunc();
             if (func && func->body) {
-                functions.push_back(func);
+                funcs.push_back(func);
+            } else if (func) {
+                delete func;
             }
         } else {
-            // Skip unknown tokens
             get();
         }
     }
-    
-    return functions;
+
+    return funcs;
 }
 
 #endif
