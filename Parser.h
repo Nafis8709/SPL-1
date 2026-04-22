@@ -425,17 +425,28 @@ Function* Parser::parseFunc() {
         string paramType = get().text;
         string paramName = "";
         
+        // Handle pointer declarators like *arr or **arr
+        while (peek().type == TokenType::OPERATOR && peek().text == "*") {
+            paramType += "*";
+            get();  // consume *
+        }
+        
         // Get parameter name 
         if (peek().type == TokenType::IDENTIFIER) {
             paramName = get().text;
             
-            // Skip array brackets after parameter name , arr[]
+            // Skip array brackets after parameter name , arr[] or arr[N]
             while (check(TokenType::PUNCTUATION, "[")) {
-                get();  
+                get();  // consume [
+                // Skip array size expression if present
+                if (!check(TokenType::PUNCTUATION, "]")) {
+                    // Parse and discard array size
+                    while (!check(TokenType::PUNCTUATION, "]") && !check(TokenType::END_OF_FILE)) {
+                        get();
+                    }
+                }
                 if (check(TokenType::PUNCTUATION, "]")) {
-                    get();  
-                } else {
-                    break;
+                    get();  // consume ]
                 }
             }
         }

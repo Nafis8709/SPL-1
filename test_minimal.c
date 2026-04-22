@@ -1,12 +1,13 @@
 #include <stdio.h>
-#include <string.h>
+
+int add(int a, int b) {
+    return a + b;
+}
 
 int main() {
-    char a[100], b[100];
-    FILE *file2 = fopen("text2.txt", "r");
-    if(file2 == NULL) {
-        return 1;
-    }
-    fclose(file2);
+    int x = 5;
+    int y = 10;
+    int z = add(x, y);
+    printf("Result: %d\n", z);
     return 0;
 }
