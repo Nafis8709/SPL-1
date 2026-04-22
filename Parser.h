@@ -307,7 +307,7 @@ Stmt* Parser::parseDecl() {
     while (check(TokenType::PUNCTUATION, "[")) {
         get();
         decl->isArray = true;
-        // Parse array size expression (could be just a number or complex expression)
+        // Parse array size expression
         if (!check(TokenType::PUNCTUATION, "]")) {
             Expr* sizeExpr = parseExpr();
             if (sizeExpr && sizeExpr->type == ExprType::NUMBER && decl->arraySize == 0) {
@@ -317,7 +317,7 @@ Stmt* Parser::parseDecl() {
         match(TokenType::PUNCTUATION, "]");
     }
 
-    // Handle initializers (skip them for now)
+    // Handle initializers
     if (match(TokenType::OPERATOR, "=")) {
         if (check(TokenType::PUNCTUATION, "{")) {
             // Skip initializer list
@@ -333,7 +333,7 @@ Stmt* Parser::parseDecl() {
         }
     }
     
-    // Handle multiple variable declarations separated by commas (e.g., int a, b, c;)
+    // Handle multiple variable declarations separated by commas
     while (match(TokenType::PUNCTUATION, ",")) {
         varName = get().text;
         DeclStmt* nextDecl = new DeclStmt(varType, varName);
@@ -403,21 +403,21 @@ Function* Parser::parseFunc() {
         delete func;
         return nullptr;
     }
-
+     //parameter loop
     while (!check(TokenType::PUNCTUATION, ")") && !check(TokenType::END_OF_FILE)) {
         if (!isType(peek().text)) break;
         string paramType = get().text;
         string paramName = "";
         
-        // Get parameter name if present
+        // Get parameter name 
         if (peek().type == TokenType::IDENTIFIER) {
             paramName = get().text;
             
-            // Skip array brackets after parameter name (e.g., "arr[]")
+            // Skip array brackets after parameter name , arr[]
             while (check(TokenType::PUNCTUATION, "[")) {
-                get();  // consume "["
+                get();  
                 if (check(TokenType::PUNCTUATION, "]")) {
-                    get();  // consume "]"
+                    get();  
                 } else {
                     break;
                 }
@@ -448,6 +448,7 @@ vector<Function*> Parser::parse() {
             while (peek().lineNumber == curLine && peek().type != TokenType::END_OF_FILE) get();
             continue;
         }
+        // detect function pattern
         if (isType(peek().text) && peek(1).type == TokenType::IDENTIFIER
             && peek(2).type == TokenType::PUNCTUATION && peek(2).text == "(") {
             Function* func = parseFunc();

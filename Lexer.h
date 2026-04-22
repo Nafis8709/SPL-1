@@ -83,7 +83,7 @@ private:
                 get();
                 continue;
             }
-            
+            //skip comments and whitespaces
             if (c == '/' && peek(1) == '/') {
                 get(); get();
                 while (peek() != '\0' && peek() != '\n') get();
@@ -189,7 +189,7 @@ private:
             char ch = get();
             text += ch;
             
-            // Check if we've found the closing quote (and it's not escaped)
+            // Check if we've found the closing quote, not escaped
             if (!escaped && ch == quote) {
                 break;
             }

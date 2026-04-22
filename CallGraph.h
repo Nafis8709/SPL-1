@@ -48,13 +48,11 @@ public:
             }
             nodes[f->name] = n;
         }
-        
         for (auto* f : funcs) {
             CallDetector d;
             if (f->body) {
                 d.visitBlock(f->body);
             }
-            
             for (const string& c : d.calls) {
                 if (nodes.find(c) != nodes.end()) {
                     nodes[f->name].callees.push_back(c);
@@ -62,17 +60,14 @@ public:
                     nodes[c].callCount++;
                 }
             }
-        }
-        
+        } 
         detectRec();
         calcEnergy();
     }
-    
     GraphNode* get(const string& name) {
         auto it = nodes.find(name);
         return it != nodes.end() ? &it->second : nullptr;
     }
-    
     vector<GraphNode*> getByEnergy() {
         vector<GraphNode*> res;
         for (auto& p : nodes) {
@@ -103,7 +98,6 @@ public:
         
         cout << "\nENERGY SUMMARY" << endl;
         cout << "==============" << endl;
-        
         cout << left << setw(20) << "Function" 
              << right << setw(10) << "Direct" 
              << setw(10) << "Total" 
@@ -125,7 +119,6 @@ public:
             cout << "function not found: " << name << endl;
             return;
         }
-        
         cout << "\nBREAKDOWN: " << name << endl;
         cout << "==========" << endl;
         
@@ -145,7 +138,6 @@ public:
         }
         
         cout << "Total: " << n->totalEnergy << " units\n" << endl;
-        
         if (!n->callers.empty()) {
             cout << "Called by: ";
             for (size_t i = 0; i < n->callers.size(); i++) {

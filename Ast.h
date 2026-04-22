@@ -104,14 +104,12 @@ struct Stmt {
     int line = 0;
     vector<Stmt*> children;
 };
-
-struct ExprStmt : Stmt {
-    Expr* expr;
-    ExprStmt(Expr* e) : expr(e) {
-        type = StmtType::EXPRESSION;
+struct BlockStmt : Stmt {
+    vector<Stmt*> statements;
+    BlockStmt() {
+        type = StmtType::BLOCK;
     }
 };
-
 struct DeclStmt : Stmt {
     string varType;
     string varName;
@@ -124,6 +122,12 @@ struct DeclStmt : Stmt {
         type = StmtType::DECLARATION;
     }
 };
+struct ExprStmt : Stmt {
+    Expr* expr;
+    ExprStmt(Expr* e) : expr(e) {
+        type = StmtType::EXPRESSION;
+    }
+};
 
 struct RetStmt : Stmt {
     Expr* retExpr;
@@ -131,14 +135,6 @@ struct RetStmt : Stmt {
         type = StmtType::RETURN;
     }
 };
-
-struct BlockStmt : Stmt {
-    vector<Stmt*> statements;
-    BlockStmt() {
-        type = StmtType::BLOCK;
-    }
-};
-
 struct IfStmt : Stmt {
     Expr* cond;
     Stmt* thenPart;
@@ -148,7 +144,6 @@ struct IfStmt : Stmt {
         type = StmtType::IF;
     }
 };
-
 struct WhileStmt : Stmt {
     Expr* cond;
     Stmt* body;
@@ -156,7 +151,6 @@ struct WhileStmt : Stmt {
         type = StmtType::WHILE;
     }
 };
-
 struct ForStmt : Stmt {
     Stmt* init;
     Expr* cond;
@@ -167,19 +161,6 @@ struct ForStmt : Stmt {
         type = StmtType::FOR;
     }
 };
-
-struct BreakStmt : Stmt {
-    BreakStmt() {
-        type = StmtType::BREAK;
-    }
-};
-
-struct ContinueStmt : Stmt {
-    ContinueStmt() {
-        type = StmtType::CONTINUE;
-    }
-};
-
 struct Function {
     string retType;
     string name;
@@ -189,5 +170,16 @@ struct Function {
     
     Function() : body(nullptr) {}
 };
+struct BreakStmt : Stmt {
+    BreakStmt() {
+        type = StmtType::BREAK;
+    }
+};
+struct ContinueStmt : Stmt {
+    ContinueStmt() {
+        type = StmtType::CONTINUE;
+    }
+};
+
 
 #endif

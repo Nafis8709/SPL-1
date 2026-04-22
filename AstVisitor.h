@@ -36,28 +36,28 @@ public:
     virtual void visitExpr(Expr* expr) {
         if (!expr) return;
         
-        switch (expr->type) {
-            case ExprType::IDENTIFIER:
-                visitIdent((IdentExpr*)expr);
-                break;
-            case ExprType::NUMBER:
-                visitNum((NumExpr*)expr);
-                break;
-            case ExprType::STRING:
-                visitStr((StrExpr*)expr);
-                break;
-            case ExprType::UNARY:
-                visitUnary((UnaryExpr*)expr);
-                break;
-            case ExprType::BINARY:
-                visitBinary((BinExpr*)expr);
-                break;
-            case ExprType::CALL:
-                visitCall((CallExpr*)expr);
-                break;
-            case ExprType::ARRAY_ACCESS:
-                visitArray((ArrExpr*)expr);
-                break;
+    switch (expr->type) {
+        case ExprType::IDENTIFIER:
+            visitIdent((IdentExpr*)expr);
+            break;
+        case ExprType::NUMBER:
+            visitNum((NumExpr*)expr);
+            break;
+        case ExprType::STRING:
+            visitStr((StrExpr*)expr);
+            break;
+        case ExprType::UNARY:
+            visitUnary((UnaryExpr*)expr);
+            break;
+        case ExprType::BINARY:
+            visitBinary((BinExpr*)expr);
+            break;
+        case ExprType::CALL:
+            visitCall((CallExpr*)expr);
+            break;
+        case ExprType::ARRAY_ACCESS:
+            visitArray((ArrExpr*)expr);
+            break;
         }
     }
     

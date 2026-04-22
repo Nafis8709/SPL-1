@@ -25,18 +25,18 @@ public:
     }
 
     void visitBinary(BinExpr* expr) override {
-        if (isArith(expr->op))       m.arithCount++;
-        else if (isCmp(expr->op))    m.compCount++;
-        else if (isLogic(expr->op))  m.logicCount++;
-        else if (isBit(expr->op))    m.bitCount++;
+        if (isArith(expr->op)) m.arithCount++;
+        else if (isCmp(expr->op)) m.compCount++;
+        else if (isLogic(expr->op)) m.logicCount++;
+        else if (isBit(expr->op)) m.bitCount++;
         Visitor::visitBinary(expr);
     }
 
     void visitUnary(UnaryExpr* expr) override {
         if (expr->op == "*" || expr->op == "&") m.memCount++;
-        else if (expr->op == "!")               m.logicCount++;
-        else if (expr->op == "~")               m.bitCount++;
-        else                                    m.arithCount++;
+        else if (expr->op == "!") m.logicCount++;
+        else if (expr->op == "~") m.bitCount++;
+        else m.arithCount++;
         Visitor::visitUnary(expr);
     }
 

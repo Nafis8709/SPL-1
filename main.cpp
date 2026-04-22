@@ -23,14 +23,13 @@ int main(int argc, char* argv[]) {
 
     string src((istreambuf_iterator<char>(f)), {});
     f.close();
+    //cout << "analyzing: " << argv[1] << "\n" << endl;
 
-    cout << "analyzing: " << argv[1] << "\n" << endl;
-
-    // step 1: tokenize
+    //1: tokenize
     Lexer lexer(src);
     vector<Token> tokens = lexer.tokenize();
 
-    // step 2: parse functions
+    //2: parse functions
     Parser parser(tokens);
     vector<Function*> funcs = parser.parse();
 
@@ -40,7 +39,7 @@ int main(int argc, char* argv[]) {
     }
     cout << "found " << funcs.size() << " function(s)" << endl;
 
-    // step 3: analyze each function
+    //3: analyze each function
     map<string, Metrics> mmap;
     Analyzer analyzer;
     analyzer.setFuncs(funcs);
@@ -49,13 +48,13 @@ int main(int argc, char* argv[]) {
         mmap[func->name] = m;
     }
 
-    // step 4: build call graph + print energy results
+    //4: build call graph + print energy results
     CallGraph cg;
     cg.build(funcs, mmap);
     cg.printSummary();
     cg.visualize();
 
-    // step 5: optimization suggestions
+    //5: optimization suggestions
     double total = 0.0;
     for (auto& p : mmap) total += p.second.energy;
 
