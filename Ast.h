@@ -93,6 +93,7 @@ enum class StmtType {
     RETURN,
     IF,
     WHILE,
+    DO_WHILE,
     FOR,
     BLOCK,
     BREAK,
@@ -149,6 +150,13 @@ struct WhileStmt : Stmt {
     Stmt* body;
     WhileStmt(Expr* c, Stmt* b) : cond(c), body(b) {
         type = StmtType::WHILE;
+    }
+};
+struct DoWhileStmt : Stmt {
+    Stmt* body;
+    Expr* cond;
+    DoWhileStmt(Stmt* b, Expr* c) : body(b), cond(c) {
+        type = StmtType::DO_WHILE;
     }
 };
 struct ForStmt : Stmt {

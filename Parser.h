@@ -51,6 +51,7 @@ private:
     Stmt* parseBlock();
     Stmt* parseIf();
     Stmt* parseWhile();
+    Stmt* parseDoWhile();
     Stmt* parseFor();
     Stmt* parseReturn();
     Stmt* parseBreak();
@@ -265,6 +266,20 @@ Stmt* Parser::parseFor() {
     return s;
 }
 
+Stmt* Parser::parseDoWhile() {
+    int ln = peek().lineNumber;
+    match(TokenType::KEYWORD, "do");
+    Stmt* body = parseStmt();
+    match(TokenType::KEYWORD, "while");
+    match(TokenType::PUNCTUATION, "(");
+    Expr* cond = parseExpr();
+    match(TokenType::PUNCTUATION, ")");
+    match(TokenType::PUNCTUATION, ";");
+    DoWhileStmt* s = new DoWhileStmt(body, cond);
+    s->line = ln;
+    return s;
+}
+
 Stmt* Parser::parseReturn() {
     int ln = peek().lineNumber;
     match(TokenType::KEYWORD, "return");
@@ -373,6 +388,7 @@ Stmt* Parser::parseStmt() {
     if (check(TokenType::PUNCTUATION, "{"))    return parseBlock();
     if (check(TokenType::KEYWORD, "if"))       return parseIf();
     if (check(TokenType::KEYWORD, "while"))    return parseWhile();
+    if (check(TokenType::KEYWORD, "do"))       return parseDoWhile();
     if (check(TokenType::KEYWORD, "for"))      return parseFor();
     if (check(TokenType::KEYWORD, "return"))   return parseReturn();
     if (check(TokenType::KEYWORD, "break"))    return parseBreak();

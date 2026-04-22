@@ -90,6 +90,11 @@ public:
         if (stmt->body) visitStmt(stmt->body);
     }
     
+    virtual void visitDoWhile(DoWhileStmt* stmt) {
+        if (stmt->body) visitStmt(stmt->body);
+        if (stmt->cond) visitExpr(stmt->cond);
+    }
+    
     virtual void visitFor(ForStmt* stmt) {
         if (stmt->init) visitStmt(stmt->init);
         if (stmt->cond) visitExpr(stmt->cond);
@@ -121,6 +126,9 @@ public:
                 break;
             case StmtType::WHILE:
                 visitWhile((WhileStmt*)stmt);
+                break;
+            case StmtType::DO_WHILE:
+                visitDoWhile((DoWhileStmt*)stmt);
                 break;
             case StmtType::FOR:
                 visitFor((ForStmt*)stmt);
